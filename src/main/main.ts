@@ -21,18 +21,26 @@ import {
 } from "../shared/constants";
 import { i18n, pick } from "../shared/i18n";
 import { PET_STATE_ORDER } from "../shared/petAppearances";
+import { dateKey, dueScheduleEvents } from "../shared/schedule";
+import type { ScheduleEvent } from "../shared/schedule";
+import { isTokenBalanceConfigured, formatTokenBalanceMessage } from "../shared/tokenUsage";
+import type { TokenUsageSnapshot } from "../shared/tokenUsage";
 import type {
   AppSnapshot,
   BlockingMode,
+  CustomAction,
+  CustomActionPlayback,
   CustomPetAsset,
   DistractionStatus,
   DemoTrigger,
+  Language,
   PetFacing,
   PetState,
   Settings,
   StatsHistory,
   SpeechBubble,
   TodayStats,
+  TokenBalanceStatus,
   UpdateCheckResult
 } from "../shared/types";
 import {
@@ -63,6 +71,7 @@ import {
 } from "./menus";
 import { createTrayImage } from "./trayIcon";
 import { getStoredSettings, normalizeSettings } from "./settingsStore";
+import { fetchTokenUsage } from "./tokenBalance";
 import {
   getCurrentStats,
   getStatsHistory,
@@ -138,6 +147,24 @@ let distractionStatus: DistractionStatus = {
   error: null
 };
 let updateCheck: UpdateCheckResult = createInitialUpdateCheck();
+let tokenBalanceTimer: NodeJS.Timeout | null = null;
+let tokenBalanceCheckInFlight = false;
+let tokenBalanceStatus: TokenBalanceStatus = {
+  state: "idle",
+  tokenName: null,
+  remaining: null,
+  total: null,
+  percentRemaining: null,
+  resetAt: null,
+  checkedAt: null,
+  error: null
+};
+let scheduleTimer: NodeJS.Timeout | null = null;
+let scheduleTimerSignature = "";
+let customActionPlaybackTimer: NodeJS.Timeout | null = null;
+let customActionPlayback: CustomActionPlayback | null = null;
+let firedScheduleKeys = new Set<string>();
+let firedScheduleDay = "";
 
 function setPetMouseInteractive(interactive: boolean): void {
   if (!petWindow || petWindow.isDestroyed() || petMouseInteractive === interactive) return;
@@ -161,6 +188,8 @@ function setSettings(next: Settings): void {
   settingsWindow?.setTitle(`${APP_NAME} ${text().menu.settings}`);
   scheduleReminderTimers();
   scheduleDistractionDetection();
+  scheduleTokenBalanceCheck();
+  scheduleReminderChecks();
   updateTrayMenu();
 }
 
@@ -185,25 +214,32 @@ function isCustomPetState(state: unknown): state is PetState {
   return typeof state === "string" && PET_STATE_ORDER.includes(state as PetState);
 }
 
-async function importCustomPetAsset(state: PetState, sourcePath: string): Promise<CustomPetAsset | null> {
-  if (!isCustomPetState(state) || typeof sourcePath !== "string") return null;
+async function storeCustomGif(
+  sourcePath: string,
+  relativeDir: string,
+  prefix: string
+): Promise<CustomPetAsset | null> {
+  if (typeof sourcePath !== "string") return null;
   if (extname(sourcePath).toLowerCase() !== ".gif") return null;
 
-  const customRoot = join(app.getPath("userData"), "custom_pet_assets");
-  const stateDir = join(customRoot, state);
-  await mkdir(stateDir, { recursive: true });
+  const targetDir = join(app.getPath("userData"), relativeDir);
+  await mkdir(targetDir, { recursive: true });
 
   const originalName = basename(sourcePath);
-  const safeName = originalName.replace(/[^a-zA-Z0-9._-]+/g, "-") || `${state}.gif`;
-  const fileName = `${state}-${Date.now()}-${safeName}`;
-  const targetPath = join(stateDir, fileName);
-  await copyFile(sourcePath, targetPath);
+  const safeName = originalName.replace(/[^a-zA-Z0-9._-]+/g, "-") || "custom.gif";
+  const fileName = `${prefix}-${Date.now()}-${safeName}`;
+  await copyFile(sourcePath, join(targetDir, fileName));
 
   return {
-    relativePath: `custom_pet_assets/${state}/${fileName}`,
+    relativePath: `${relativeDir}/${fileName}`,
     originalName,
     updatedAt: Date.now()
   };
+}
+
+async function importCustomPetAsset(state: PetState, sourcePath: string): Promise<CustomPetAsset | null> {
+  if (!isCustomPetState(state)) return null;
+  return storeCustomGif(sourcePath, `custom_pet_assets/${state}`, state);
 }
 
 function resetTodayStats(): void {
@@ -215,6 +251,12 @@ function resetTodayStats(): void {
 async function selectCustomPetAsset(state: PetState): Promise<CustomPetAsset | null> {
   if (!isCustomPetState(state)) return null;
 
+  const sourcePath = await pickGifFile();
+  if (!sourcePath) return null;
+  return importCustomPetAsset(state, sourcePath);
+}
+
+async function pickGifFile(): Promise<string | null> {
   const options: Electron.OpenDialogOptions = {
     properties: ["openFile"],
     filters: [{ name: "GIF Images", extensions: ["gif"] }]
@@ -225,7 +267,13 @@ async function selectCustomPetAsset(state: PetState): Promise<CustomPetAsset | n
       : await dialog.showOpenDialog(options);
 
   if (result.canceled || !result.filePaths[0]) return null;
-  return importCustomPetAsset(state, result.filePaths[0]);
+  return result.filePaths[0];
+}
+
+async function selectCustomActionGif(): Promise<CustomPetAsset | null> {
+  const sourcePath = await pickGifFile();
+  if (!sourcePath) return null;
+  return storeCustomGif(sourcePath, "custom_action_assets", "action");
 }
 
 function snapshot(): AppSnapshot {
@@ -244,6 +292,8 @@ function snapshot(): AppSnapshot {
       focusEndsAt
     },
     distraction: distractionStatus,
+    tokenBalance: tokenBalanceStatus,
+    customActionPlayback,
     petState,
     petFacing,
     blockingMode,
@@ -517,7 +567,8 @@ function menuState() {
     appName: APP_NAME,
     dogVisible: Boolean(petWindow?.isVisible()),
     focusActive,
-    isPackaged: app.isPackaged
+    isPackaged: app.isPackaged,
+    customActions: getSettings().customActions
   };
 }
 
@@ -529,6 +580,7 @@ function menuActions() {
     stopFocusFromMenu: () => stopFocusMode(true),
     stopFocusFromContext: () => stopFocusMode(false),
     openSettings: createSettingsWindow,
+    playCustomAction: triggerCustomAction,
     quit: () => app.quit(),
     triggerDemo
   };
@@ -932,6 +984,255 @@ async function checkForUpdates(options: { notifyAvailable?: boolean } = {}): Pro
   return result;
 }
 
+function tokenBalanceConfigKey(settings: Settings): string {
+  return [
+    settings.tokenBalanceReminderEnabled ? "1" : "0",
+    settings.newApiBaseUrl,
+    settings.newApiKey,
+    String(settings.tokenBalanceReminderIntervalMinutes)
+  ].join("|");
+}
+
+let tokenBalanceConfigKeyCache: string | null = null;
+
+function setTokenBalanceStatus(partial: Partial<TokenBalanceStatus>): void {
+  tokenBalanceStatus = { ...tokenBalanceStatus, ...partial };
+  publishSnapshot();
+}
+
+function showTokenBalanceBubble(usage: TokenUsageSnapshot, language: Language): void {
+  if (blockingMode) return;
+  ensurePetWindowVisible();
+  showBubble({
+    id: "token-balance",
+    message: formatTokenBalanceMessage(usage, language),
+    autoDismissMs: 12_000
+  });
+}
+
+async function checkTokenBalance(options: { notify?: boolean; force?: boolean } = {}): Promise<TokenBalanceStatus> {
+  const settings = getSettings();
+  const language = settings.language;
+
+  if (!isTokenBalanceConfigured(settings)) {
+    setTokenBalanceStatus({
+      state: "idle",
+      tokenName: null,
+      remaining: null,
+      total: null,
+      percentRemaining: null,
+      resetAt: null,
+      checkedAt: null,
+      error: null
+    });
+    return tokenBalanceStatus;
+  }
+  if (!options.force && !settings.tokenBalanceReminderEnabled) {
+    return tokenBalanceStatus;
+  }
+  if (tokenBalanceCheckInFlight) return tokenBalanceStatus;
+
+  const configKey = tokenBalanceConfigKey(settings);
+  tokenBalanceCheckInFlight = true;
+  setTokenBalanceStatus({ state: "checking", error: null });
+
+  try {
+    const usage = await fetchTokenUsage(settings);
+    if (tokenBalanceConfigKey(getSettings()) !== configKey) {
+      return tokenBalanceStatus;
+    }
+
+    setTokenBalanceStatus({
+      state: usage.unlimited ? "unlimited" : "ok",
+      tokenName: usage.tokenName,
+      remaining: usage.unlimited ? null : usage.remaining,
+      total: usage.unlimited ? null : usage.total,
+      percentRemaining: usage.unlimited ? null : usage.percentRemaining,
+      resetAt: usage.unlimited ? null : usage.resetAt,
+      checkedAt: Date.now(),
+      error: null
+    });
+    if (options.notify) showTokenBalanceBubble(usage, language);
+  } catch (error) {
+    if (tokenBalanceConfigKey(getSettings()) !== configKey) {
+      return tokenBalanceStatus;
+    }
+
+    const message = error instanceof Error ? error.message : String(error);
+    setTokenBalanceStatus({
+      state: "error",
+      checkedAt: Date.now(),
+      error: message
+    });
+    if (options.notify && !blockingMode) {
+      ensurePetWindowVisible();
+      showBubble({
+        id: "token-balance-error",
+        message: i18n(language).settings.tokenBalanceError(message),
+        autoDismissMs: 12_000
+      });
+    }
+  } finally {
+    tokenBalanceCheckInFlight = false;
+    if (tokenBalanceConfigKey(getSettings()) !== configKey) {
+      void checkTokenBalance({ notify: false });
+    }
+  }
+
+  return tokenBalanceStatus;
+}
+
+function scheduleTokenBalanceCheck(): void {
+  const settings = getSettings();
+  const configKey = tokenBalanceConfigKey(settings);
+  if (configKey === tokenBalanceConfigKeyCache) return;
+  tokenBalanceConfigKeyCache = configKey;
+
+  if (tokenBalanceTimer) {
+    clearInterval(tokenBalanceTimer);
+    tokenBalanceTimer = null;
+  }
+
+  if (!settings.tokenBalanceReminderEnabled || !isTokenBalanceConfigured(settings)) {
+    setTokenBalanceStatus({
+      state: "idle",
+      tokenName: null,
+      remaining: null,
+      total: null,
+      percentRemaining: null,
+      resetAt: null,
+      checkedAt: null,
+      error: null
+    });
+    return;
+  }
+
+  void checkTokenBalance({ notify: false });
+  const intervalMs = settings.tokenBalanceReminderIntervalMinutes * 60 * 1000;
+  tokenBalanceTimer = setInterval(() => void checkTokenBalance({ notify: true }), intervalMs);
+}
+
+function clearCustomActionPlayback(): void {
+  if (customActionPlaybackTimer) {
+    clearTimeout(customActionPlaybackTimer);
+    customActionPlaybackTimer = null;
+  }
+  if (!customActionPlayback) return;
+  customActionPlayback = null;
+  publishSnapshot();
+}
+
+function playCustomAction(action: CustomAction): void {
+  if (!action.asset) return;
+  if (customActionPlaybackTimer) clearTimeout(customActionPlaybackTimer);
+
+  ensurePetWindowVisible();
+  customActionPlayback = {
+    id: action.id,
+    name: action.name,
+    relativePath: action.asset.relativePath,
+    startedAt: Date.now()
+  };
+  publishSnapshot();
+  showBubble({
+    id: "custom-action",
+    message: action.name || text().menu.unnamedAction,
+    autoDismissMs: 6000
+  });
+  customActionPlaybackTimer = setTimeout(clearCustomActionPlayback, 8000);
+}
+
+function triggerCustomAction(actionId: string): void {
+  const action = getSettings().customActions.find((entry) => entry.id === actionId);
+  if (action) playCustomAction(action);
+}
+
+function scheduleBubbleMessage(event: ScheduleEvent): string {
+  const labels = i18n(getSettings().language).bubble;
+  if (event.kind === "workStart") return pick(labels.workStartReminder);
+  if (event.kind === "workEnd") return pick(labels.workEndReminder);
+  return pick(labels.mealReminder)(event.time);
+}
+
+function playScheduledAsset(kind: ScheduleEvent["kind"]): void {
+  const settings = getSettings();
+  const asset =
+    kind === "workStart"
+      ? settings.workStartAsset
+      : kind === "workEnd"
+        ? settings.workEndAsset
+        : settings.mealAsset;
+
+  if (asset) {
+    if (customActionPlaybackTimer) clearTimeout(customActionPlaybackTimer);
+    customActionPlayback = {
+      id: `schedule-${kind}`,
+      name: "",
+      relativePath: asset.relativePath,
+      startedAt: Date.now()
+    };
+    publishSnapshot();
+    customActionPlaybackTimer = setTimeout(clearCustomActionPlayback, 8000);
+    return;
+  }
+
+  setPetState("happy");
+  setTimeout(() => {
+    if (!blockingMode && !customActionPlayback) setPetState(focusActive ? "focusGuard" : "idle");
+  }, 4000);
+}
+
+function fireScheduleEvent(event: ScheduleEvent): void {
+  if (blockingMode) return;
+  ensurePetWindowVisible();
+  playScheduledAsset(event.kind);
+  showBubble({
+    id: `schedule-${event.key}`,
+    message: scheduleBubbleMessage(event),
+    autoDismissMs: 12_000
+  });
+}
+
+function checkScheduleReminders(): void {
+  const settings = getSettings();
+  if (!settings.scheduleRemindersEnabled || blockingMode) return;
+
+  const now = new Date();
+  const today = dateKey(now);
+  if (today !== firedScheduleDay) {
+    firedScheduleDay = today;
+    firedScheduleKeys = new Set();
+  }
+
+  for (const event of dueScheduleEvents(now, settings, 5)) {
+    if (firedScheduleKeys.has(event.key)) continue;
+    firedScheduleKeys.add(event.key);
+    fireScheduleEvent(event);
+    break;
+  }
+}
+
+function scheduleReminderChecks(): void {
+  const settings = getSettings();
+  const signature = [
+    settings.scheduleRemindersEnabled ? "1" : "0",
+    settings.workStartTime,
+    settings.workEndTime,
+    settings.mealTimes.join(",")
+  ].join("|");
+  if (signature === scheduleTimerSignature) return;
+  scheduleTimerSignature = signature;
+
+  if (scheduleTimer) {
+    clearInterval(scheduleTimer);
+    scheduleTimer = null;
+  }
+  if (!settings.scheduleRemindersEnabled) return;
+
+  checkScheduleReminders();
+  scheduleTimer = setInterval(checkScheduleReminders, 30_000);
+}
+
 function triggerBreakReminder(fromDemo: boolean): void {
   if (!fromDemo) {
     breakTimer = null;
@@ -1148,12 +1449,14 @@ function handleBubbleAction(actionId: string): void {
 function registerIpc(): void {
   ipcMain.handle("app:get-snapshot", () => snapshot());
   ipcMain.handle("app:check-for-updates", () => checkForUpdates({ notifyAvailable: true }));
+  ipcMain.handle("token-balance:check", () => checkTokenBalance({ notify: false, force: true }));
   ipcMain.handle("custom-pet:select-asset", (_event, state: PetState) =>
     selectCustomPetAsset(state)
   );
   ipcMain.handle("custom-pet:import-asset", (_event, state: PetState, sourcePath: string) =>
     importCustomPetAsset(state, sourcePath)
   );
+  ipcMain.handle("custom-gif:select", () => selectCustomActionGif());
   ipcMain.on("app:open-release-notes", openReleaseNotes);
   ipcMain.on("pet:clicked", () => {
     if (blockingMode) return;
@@ -1194,15 +1497,26 @@ app.whenReady().then(() => {
     const appBase = app.isPackaged ? process.resourcesPath : process.cwd();
     const builtInAssetRoot = resolve(appBase, "pet_assets");
     const customAssetRoot = resolve(app.getPath("userData"), "custom_pet_assets");
-    const assetPath = relativePath.startsWith("custom_pet_assets/")
+    const customActionAssetRoot = resolve(app.getPath("userData"), "custom_action_assets");
+    const isUserAssetPath =
+      relativePath.startsWith("custom_pet_assets/") ||
+      relativePath.startsWith("custom_action_assets/");
+    const assetPath = isUserAssetPath
       ? resolve(app.getPath("userData"), relativePath)
       : resolve(appBase, relativePath);
     const isInsideBuiltInAssetRoot =
       assetPath === builtInAssetRoot || assetPath.startsWith(`${builtInAssetRoot}${sep}`);
     const isInsideCustomAssetRoot =
       assetPath === customAssetRoot || assetPath.startsWith(`${customAssetRoot}${sep}`);
+    const isInsideCustomActionAssetRoot =
+      assetPath === customActionAssetRoot ||
+      assetPath.startsWith(`${customActionAssetRoot}${sep}`);
 
-    if (!isInsideBuiltInAssetRoot && !isInsideCustomAssetRoot) {
+    if (
+      !isInsideBuiltInAssetRoot &&
+      !isInsideCustomAssetRoot &&
+      !isInsideCustomActionAssetRoot
+    ) {
       return new Response("Asset not found", { status: 404 });
     }
 
@@ -1216,6 +1530,8 @@ app.whenReady().then(() => {
   registerDisplayChangeHandlers();
   scheduleReminderTimers();
   scheduleDistractionDetection();
+  scheduleTokenBalanceCheck();
+  scheduleReminderChecks();
   if (IS_DEV) {
     createSettingsWindow();
   }
@@ -1238,6 +1554,9 @@ app.on("before-quit", () => {
     focusTimer,
     distractionTimer,
     distractionStartupTimer,
+    tokenBalanceTimer,
+    scheduleTimer,
+    customActionPlaybackTimer,
     displayChangeTimer,
     bubbleTimer,
     dragTimer,

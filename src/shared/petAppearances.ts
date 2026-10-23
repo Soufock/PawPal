@@ -301,14 +301,20 @@ function isPetState(value: string): value is PetState {
   return PET_STATE_ORDER.includes(value as PetState);
 }
 
-function normalizeCustomAsset(value: unknown): CustomPetAsset | null {
+const CUSTOM_ASSET_ROOTS = ["custom_pet_assets/", "custom_action_assets/"];
+
+export function isCustomAssetPath(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    CUSTOM_ASSET_ROOTS.some((root) => value.startsWith(root)) &&
+    value.toLowerCase().endsWith(".gif")
+  );
+}
+
+export function normalizeCustomAsset(value: unknown): CustomPetAsset | null {
   if (!value || typeof value !== "object") return null;
   const asset = value as Partial<CustomPetAsset>;
-  if (
-    typeof asset.relativePath !== "string" ||
-    !asset.relativePath.startsWith("custom_pet_assets/") ||
-    !asset.relativePath.toLowerCase().endsWith(".gif")
-  ) {
+  if (!isCustomAssetPath(asset.relativePath)) {
     return null;
   }
 

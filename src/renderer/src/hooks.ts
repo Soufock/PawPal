@@ -41,6 +41,17 @@ export function useSnapshot(): AppSnapshot {
       lastWarningAt: null,
       error: null
     },
+    tokenBalance: {
+      state: "idle",
+      tokenName: null,
+      remaining: null,
+      total: null,
+      percentRemaining: null,
+      resetAt: null,
+      checkedAt: null,
+      error: null
+    },
+    customActionPlayback: null,
     petState: "idle",
     petFacing: "right",
     blockingMode: null,

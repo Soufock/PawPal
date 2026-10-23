@@ -9,8 +9,11 @@ import {
   resolveBuiltInPetAppearanceId,
   resolvePetAppearanceId
 } from "../../../shared/petAppearances";
+import { isTokenBalanceConfigured, isValidNewApiBaseUrl } from "../../../shared/tokenUsage";
+import { isValidTime } from "../../../shared/schedule";
 import type {
   BuiltInPetAppearanceId,
+  CustomAction,
   CustomPetAppearance,
   CustomPetAsset,
   DemoTrigger,
@@ -19,7 +22,15 @@ import type {
   UpdateCheckResult
 } from "../../../shared/types";
 import { getPetAsset } from "../assets";
-import { distractionHelp, formatDistractionState, formatTimer, formatTimestamp, localeFor } from "../format";
+import {
+  distractionHelp,
+  formatDistractionState,
+  formatTimer,
+  formatTimestamp,
+  formatTokenBalanceDetail,
+  formatTokenBalanceStatus,
+  localeFor
+} from "../format";
 import { useNow, useSnapshot } from "../hooks";
 
 type SettingsCopy = ReturnType<typeof i18n>["settings"];
@@ -47,11 +58,13 @@ function Row({
 function ToggleControl({
   checked,
   onChange,
-  ariaLabel
+  ariaLabel,
+  disabled = false
 }: {
   checked: boolean;
   onChange: (next: boolean) => void;
   ariaLabel: string;
+  disabled?: boolean;
 }): JSX.Element {
   return (
     <button
@@ -59,11 +72,38 @@ function ToggleControl({
       role="switch"
       aria-checked={checked}
       aria-label={ariaLabel}
+      disabled={disabled}
       className={`pref-toggle${checked ? " is-on" : ""}`}
       onClick={() => onChange(!checked)}
     >
       <span className="pref-toggle__thumb" />
     </button>
+  );
+}
+
+function TextControl({
+  value,
+  placeholder,
+  type = "text",
+  invalid = false,
+  onChange
+}: {
+  value: string;
+  placeholder?: string;
+  type?: "text" | "password";
+  invalid?: boolean;
+  onChange: (next: string) => void;
+}): JSX.Element {
+  return (
+    <input
+      className={`pref-input${invalid ? " is-invalid" : ""}`}
+      type={type}
+      value={value}
+      placeholder={placeholder}
+      spellCheck={false}
+      autoComplete="off"
+      onChange={(event) => onChange(event.target.value)}
+    />
   );
 }
 
@@ -146,6 +186,70 @@ function NumberControl({
       >
         +
       </button>
+    </div>
+  );
+}
+
+function TimeControl({
+  value,
+  onChange
+}: {
+  value: string;
+  onChange: (next: string) => void;
+}): JSX.Element {
+  const [draft, setDraft] = useState(value);
+
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+
+  return (
+    <input
+      className="pref-time"
+      type="time"
+      value={draft}
+      onChange={(event) => {
+        const next = event.target.value;
+        setDraft(next);
+        if (isValidTime(next)) onChange(next);
+      }}
+      onBlur={() => {
+        if (!isValidTime(draft)) setDraft(value);
+      }}
+    />
+  );
+}
+
+function GifControl({
+  asset,
+  labels,
+  onSelect,
+  onRemove
+}: {
+  asset: CustomPetAsset | null;
+  labels: SettingsCopy;
+  onSelect: () => void;
+  onRemove: () => void;
+}): JSX.Element {
+  return (
+    <div className="pref-gif">
+      {asset ? (
+        <img
+          className="pref-gif__preview"
+          src={new URL(window.pawpal.assetUrl(asset.relativePath)).href}
+          alt=""
+        />
+      ) : (
+        <span className="pref-gif__empty">{labels.defaultAnimation}</span>
+      )}
+      <button type="button" className="pref-button" onClick={onSelect}>
+        {asset ? labels.replaceGif : labels.uploadGif}
+      </button>
+      {asset ? (
+        <button type="button" className="pref-button" onClick={onRemove}>
+          {labels.removeGif}
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -321,6 +425,9 @@ export function SettingsView(): JSX.Element {
   const language = resolveLanguage(draft.language);
   const labels = i18n(language).settings;
   const customPetReady = hasRequiredCustomPetAssets(draft.customPetAppearance);
+  const tokenBalanceConfigured = isTokenBalanceConfigured(draft);
+  const tokenBalanceInvalidUrl =
+    draft.newApiBaseUrl.trim().length > 0 && !isValidNewApiBaseUrl(draft.newApiBaseUrl);
 
   const petAvatar = useMemo(
     () =>
@@ -356,6 +463,73 @@ export function SettingsView(): JSX.Element {
 
   async function checkForUpdates(): Promise<void> {
     await window.pawpal.checkForUpdates();
+  }
+
+  async function checkTokenBalance(): Promise<void> {
+    await window.pawpal.checkTokenBalance();
+  }
+
+  function updateTokenBalanceConfig(partial: Partial<Settings>): void {
+    const next = { ...draft, ...partial };
+    updateDraft({
+      ...partial,
+      tokenBalanceReminderEnabled:
+        next.tokenBalanceReminderEnabled && isTokenBalanceConfigured(next)
+    });
+  }
+
+  function addCustomAction(): void {
+    updateDraft({
+      customActions: [
+        ...draft.customActions,
+        { id: `action-${Date.now()}`, name: labels.newCustomAction, asset: null }
+      ]
+    });
+  }
+
+  function updateCustomAction(id: string, partial: Partial<CustomAction>): void {
+    updateDraft({
+      customActions: draft.customActions.map((action) =>
+        action.id === id ? { ...action, ...partial } : action
+      )
+    });
+  }
+
+  function removeCustomAction(id: string): void {
+    updateDraft({
+      customActions: draft.customActions.filter((action) => action.id !== id)
+    });
+  }
+
+  async function uploadCustomActionGif(id: string): Promise<void> {
+    const asset = await window.pawpal.selectCustomGif();
+    if (asset) updateCustomAction(id, { asset });
+  }
+
+  async function uploadScheduleGif(
+    key: "workStartAsset" | "workEndAsset" | "mealAsset"
+  ): Promise<void> {
+    const asset = await window.pawpal.selectCustomGif();
+    if (asset) updateDraft({ [key]: asset } as Partial<Settings>);
+  }
+
+  function addMealTime(): void {
+    const used = new Set(draft.mealTimes);
+    const candidate =
+      ["12:00", "12:30", "13:00", "18:00", "18:30", "19:00"].find(
+        (time) => !used.has(time)
+      ) ?? "12:00";
+    updateDraft({ mealTimes: [...draft.mealTimes, candidate].sort() });
+  }
+
+  function updateMealTime(index: number, time: string): void {
+    updateDraft({
+      mealTimes: draft.mealTimes.map((entry, current) => (current === index ? time : entry))
+    });
+  }
+
+  function removeMealTime(index: number): void {
+    updateDraft({ mealTimes: draft.mealTimes.filter((_, current) => current !== index) });
   }
 
   async function uploadCustomPetAsset(state: PetState): Promise<void> {
@@ -547,6 +721,227 @@ export function SettingsView(): JSX.Element {
             />
           }
         />
+      </section>
+
+      <section className="prefs__group">
+        <h2 className="prefs__group-title">{labels.tokenBalance}</h2>
+        <Row
+          label={labels.enableTokenBalanceReminder}
+          hint={
+            tokenBalanceConfigured
+              ? labels.tokenBalanceHelp
+              : labels.tokenBalanceNeedsConfig
+          }
+          control={
+            <ToggleControl
+              checked={draft.tokenBalanceReminderEnabled}
+              disabled={!tokenBalanceConfigured}
+              onChange={(tokenBalanceReminderEnabled) =>
+                updateDraft({ tokenBalanceReminderEnabled })
+              }
+              ariaLabel={labels.enableTokenBalanceReminder}
+            />
+          }
+        />
+        <Row
+          label={labels.newApiBaseUrl}
+          hint={tokenBalanceInvalidUrl ? labels.tokenBalanceInvalidUrl : undefined}
+          control={
+            <TextControl
+              value={draft.newApiBaseUrl}
+              placeholder={labels.newApiBaseUrlPlaceholder}
+              invalid={tokenBalanceInvalidUrl}
+              onChange={(newApiBaseUrl) => updateTokenBalanceConfig({ newApiBaseUrl })}
+            />
+          }
+        />
+        <Row
+          label={labels.newApiKey}
+          hint={labels.newApiKeyHelp}
+          control={
+            <TextControl
+              type="password"
+              value={draft.newApiKey}
+              placeholder={labels.newApiKeyPlaceholder}
+              onChange={(newApiKey) => updateTokenBalanceConfig({ newApiKey })}
+            />
+          }
+        />
+        <Row
+          label={labels.tokenBalanceInterval}
+          hint={labels.tokenBalanceIntervalHelp}
+          control={
+            <NumberControl
+              value={draft.tokenBalanceReminderIntervalMinutes}
+              min={1}
+              max={1440}
+              unit={labels.minuteUnit}
+              onChange={(tokenBalanceReminderIntervalMinutes) =>
+                updateDraft({ tokenBalanceReminderIntervalMinutes })
+              }
+            />
+          }
+        />
+        <Row
+          label={labels.tokenBalanceCurrent}
+          hint={formatTokenBalanceDetail(snapshot.tokenBalance, language, labels) ?? undefined}
+          control={
+            <div className="pref-token-status">
+              <span className="pref-static-value">
+                {formatTokenBalanceStatus(snapshot.tokenBalance, language, labels)}
+              </span>
+              <button
+                type="button"
+                className="pref-button"
+                disabled={
+                  snapshot.tokenBalance.state === "checking" || !tokenBalanceConfigured
+                }
+                onClick={() => void checkTokenBalance()}
+              >
+                {snapshot.tokenBalance.state === "checking"
+                  ? labels.tokenBalanceChecking
+                  : labels.tokenBalanceCheck}
+              </button>
+            </div>
+          }
+        />
+      </section>
+
+      <section className="prefs__group">
+        <h2 className="prefs__group-title">{labels.customActions}</h2>
+        <Row
+          label={labels.customActions}
+          hint={labels.customActionsHelp}
+          control={
+            <button type="button" className="pref-button" onClick={addCustomAction}>
+              {labels.addCustomAction}
+            </button>
+          }
+        />
+        {draft.customActions.length === 0 ? (
+          <p className="pref-note">{labels.noCustomActions}</p>
+        ) : null}
+        {draft.customActions.map((action) => (
+          <div className="custom-action" key={action.id}>
+            <input
+              className="pref-input custom-action__name"
+              value={action.name}
+              aria-label={labels.customActionName}
+              placeholder={labels.customActionNamePlaceholder}
+              onChange={(event) => updateCustomAction(action.id, { name: event.target.value })}
+            />
+            <GifControl
+              asset={action.asset}
+              labels={labels}
+              onSelect={() => void uploadCustomActionGif(action.id)}
+              onRemove={() => updateCustomAction(action.id, { asset: null })}
+            />
+            <button
+              type="button"
+              className="pref-button"
+              aria-label={labels.removeCustomAction(action.name)}
+              onClick={() => removeCustomAction(action.id)}
+            >
+              {labels.deleteAction}
+            </button>
+          </div>
+        ))}
+      </section>
+
+      <section className="prefs__group">
+        <h2 className="prefs__group-title">{labels.schedule}</h2>
+        <Row
+          label={labels.enableScheduleReminders}
+          hint={labels.scheduleHelp}
+          control={
+            <ToggleControl
+              checked={draft.scheduleRemindersEnabled}
+              onChange={(scheduleRemindersEnabled) =>
+                updateDraft({ scheduleRemindersEnabled })
+              }
+              ariaLabel={labels.enableScheduleReminders}
+            />
+          }
+        />
+        {draft.scheduleRemindersEnabled ? (
+          <>
+            <Row
+              label={labels.workStartTime}
+              control={
+                <TimeControl
+                  value={draft.workStartTime}
+                  onChange={(workStartTime) => updateDraft({ workStartTime })}
+                />
+              }
+            />
+            <Row
+              label={labels.workStartGif}
+              control={
+                <GifControl
+                  asset={draft.workStartAsset}
+                  labels={labels}
+                  onSelect={() => void uploadScheduleGif("workStartAsset")}
+                  onRemove={() => updateDraft({ workStartAsset: null })}
+                />
+              }
+            />
+            <Row
+              label={labels.workEndTime}
+              control={
+                <TimeControl
+                  value={draft.workEndTime}
+                  onChange={(workEndTime) => updateDraft({ workEndTime })}
+                />
+              }
+            />
+            <Row
+              label={labels.workEndGif}
+              control={
+                <GifControl
+                  asset={draft.workEndAsset}
+                  labels={labels}
+                  onSelect={() => void uploadScheduleGif("workEndAsset")}
+                  onRemove={() => updateDraft({ workEndAsset: null })}
+                />
+              }
+            />
+            <div className="pref-block">
+              <span className="pref-block__label">{labels.mealTimes}</span>
+              <div className="meal-times">
+                {draft.mealTimes.map((time, index) => (
+                  <div className="meal-time" key={`${time}-${index}`}>
+                    <TimeControl
+                      value={time}
+                      onChange={(next) => updateMealTime(index, next)}
+                    />
+                    <button
+                      type="button"
+                      className="meal-time__remove"
+                      aria-label={labels.removeMealTime(time)}
+                      onClick={() => removeMealTime(index)}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+                <button type="button" className="pref-button" onClick={addMealTime}>
+                  {labels.addMealTime}
+                </button>
+              </div>
+            </div>
+            <Row
+              label={labels.mealGif}
+              control={
+                <GifControl
+                  asset={draft.mealAsset}
+                  labels={labels}
+                  onSelect={() => void uploadScheduleGif("mealAsset")}
+                  onRemove={() => updateDraft({ mealAsset: null })}
+                />
+              }
+            />
+          </>
+        ) : null}
       </section>
 
       <section className="prefs__group">

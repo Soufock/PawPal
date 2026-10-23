@@ -79,6 +79,40 @@ export const I18N = {
       updateAvailable: [
         (version: string) => `发现新版本 ${version}，去看看更新吧`,
         (version: string) => `PawPal 有新版本 ${version} 啦`
+      ],
+      tokenBalance: [
+        (percent: string, remaining: string, reset: string) =>
+          reset
+            ? `Token 余量 ${percent}（剩 ${remaining}），${reset}重置`
+            : `Token 余量 ${percent}（剩 ${remaining}）`,
+        (percent: string, remaining: string, reset: string) =>
+          reset
+            ? `提醒一下：额度还剩 ${percent}，约 ${remaining}，${reset}刷新`
+            : `提醒一下：额度还剩 ${percent}，约 ${remaining}`,
+        (percent: string, remaining: string, reset: string) =>
+          reset
+            ? `Token 只剩 ${percent} 啦，${reset}恢复，省着点用~`
+            : `Token 只剩 ${percent} 啦，省着点用~`
+      ],
+      tokenBalanceNoTotal: [
+        (remaining: string) => `Token 余量：剩 ${remaining}`,
+        (remaining: string) => `提醒一下：额度还剩 ${remaining}`
+      ],
+      tokenBalanceUnlimited: [
+        "Token 额度无限，随便用~",
+        "额度无限，不用担心啦"
+      ],
+      workStartReminder: [
+        "到上班时间啦，一起开工吧！",
+        "上班咯，我陪你一起~"
+      ],
+      workEndReminder: [
+        "下班啦！今天辛苦了",
+        "下班时间到，快收拾东西回家~"
+      ],
+      mealReminder: [
+        (time: string) => `${time} 到啦，该吃饭了！`,
+        (time: string) => `饭点到了（${time}），别饿着自己~`
       ]
     },
     actions: {
@@ -96,6 +130,8 @@ export const I18N = {
       hideDog: "隐藏宠物",
       startFocusMode: "开始专注模式",
       stopFocusMode: "停止专注模式",
+      customActions: "自定义动作",
+      unnamedAction: "未命名动作",
       demoBreakReminder: "演示：休息提醒",
       demoHydrationReminder: "演示：喝水提醒",
       demoFocusWarning: "演示：分心提醒",
@@ -183,6 +219,51 @@ export const I18N = {
       breakRunDuration: "休息时长",
       enableHydrationReminder: "开启喝水提醒",
       hydrationInterval: "喝水间隔",
+      tokenBalance: "Token 余量",
+      enableTokenBalanceReminder: "开启 Token 余量提醒",
+      tokenBalanceNeedsConfig: "请先填写 Base URL 和 API Key，才能开启提醒。",
+      tokenBalanceHelp: "按设定间隔请求 New API，并在小狗气泡里显示剩余额度。",
+      newApiBaseUrl: "New API Base URL",
+      newApiBaseUrlPlaceholder: "https://api.example.com",
+      newApiKey: "API Key",
+      newApiKeyPlaceholder: "sk-...",
+      newApiKeyHelp: "只保存在本机设置文件中，不会上传到其他地方。",
+      tokenBalanceInterval: "提醒间隔",
+      tokenBalanceIntervalHelp: "每次检查都会弹出一条气泡提醒。",
+      tokenBalanceCheck: "立即检查",
+      tokenBalanceCurrent: "当前余量",
+      tokenBalanceChecking: "检查中…",
+      tokenBalanceIdle: "还没有检查。",
+      tokenBalanceUnconfigured: "请先填写 Base URL 和 API Key。",
+      tokenBalanceOk: (percent: string, remaining: string) => `剩余 ${percent}（${remaining}）`,
+      tokenBalanceUnlimited: "额度无限",
+      tokenBalanceError: (message: string) => `检查失败：${message}`,
+      tokenBalanceResetAt: (time: string) => `${time} 重置`,
+      tokenBalanceCheckedAt: (time: string) => `上次检查：${time}`,
+      tokenBalanceInvalidUrl: "Base URL 格式不正确。",
+      customActions: "自定义动作",
+      customActionsHelp: "添加动作并上传 GIF 后，右键宠物即可播放。",
+      addCustomAction: "添加动作",
+      customActionName: "动作名称",
+      customActionNamePlaceholder: "例如：打招呼",
+      customActionGif: "动作 GIF",
+      noCustomActions: "还没有自定义动作。",
+      removeCustomAction: (name: string) => `删除动作 ${name}`,
+      newCustomAction: "新动作",
+      deleteAction: "删除",
+      schedule: "作息提醒",
+      enableScheduleReminders: "开启作息提醒",
+      scheduleHelp: "仅工作日生效；到点后小狗会弹气泡提醒，配了 GIF 就播放 GIF。",
+      workStartTime: "上班时间",
+      workEndTime: "下班时间",
+      mealTimes: "吃饭时间",
+      addMealTime: "添加时间",
+      removeMealTime: (time: string) => `移除 ${time}`,
+      scheduleGif: "提醒 GIF",
+      workStartGif: "上班提醒 GIF",
+      workEndGif: "下班提醒 GIF",
+      mealGif: "吃饭提醒 GIF",
+      defaultAnimation: "默认动画",
       focus: "专注",
       focusDuration: "专注时长",
       enableDistractionDetection: "开启分心检测",
@@ -317,6 +398,40 @@ export const I18N = {
       updateAvailable: [
         (version: string) => `Version ${version} is available. Want to see what's new?`,
         (version: string) => `PawPal has a new version: ${version}.`
+      ],
+      tokenBalance: [
+        (percent: string, remaining: string, reset: string) =>
+          reset
+            ? `Token balance ${percent} left (${remaining}), resets ${reset}`
+            : `Token balance ${percent} left (${remaining})`,
+        (percent: string, remaining: string, reset: string) =>
+          reset
+            ? `Heads up: ${percent} left, about ${remaining}, refreshes ${reset}`
+            : `Heads up: ${percent} left, about ${remaining}`,
+        (percent: string, remaining: string, reset: string) =>
+          reset
+            ? `Only ${percent} of your tokens left, back ${reset}~`
+            : `Only ${percent} of your tokens left~`
+      ],
+      tokenBalanceNoTotal: [
+        (remaining: string) => `Token balance: ${remaining} left`,
+        (remaining: string) => `Heads up: ${remaining} left`
+      ],
+      tokenBalanceUnlimited: [
+        "Unlimited tokens, go wild~",
+        "Unlimited quota, nothing to worry about"
+      ],
+      workStartReminder: [
+        "Time to start work — let's go!",
+        "Work time! I'll keep you company~"
+      ],
+      workEndReminder: [
+        "You're off work! Great job today",
+        "Work's over, pack up and head home~"
+      ],
+      mealReminder: [
+        (time: string) => `It's ${time} — time to eat!`,
+        (time: string) => `Meal time (${time}), don't go hungry~`
       ]
     },
     actions: {
@@ -334,6 +449,8 @@ export const I18N = {
       hideDog: "Hide Pet",
       startFocusMode: "Start Focus Mode",
       stopFocusMode: "Stop Focus Mode",
+      customActions: "Custom Actions",
+      unnamedAction: "Untitled action",
       demoBreakReminder: "Demo: Break Reminder",
       demoHydrationReminder: "Demo: Hydration Reminder",
       demoFocusWarning: "Demo: Distraction Nudge",
@@ -424,6 +541,54 @@ export const I18N = {
       breakRunDuration: "Break Duration",
       enableHydrationReminder: "Enable Hydration Reminder",
       hydrationInterval: "Hydration Interval",
+      tokenBalance: "Token Balance",
+      enableTokenBalanceReminder: "Enable Token Balance Reminder",
+      tokenBalanceNeedsConfig: "Enter a Base URL and API Key first to enable reminders.",
+      tokenBalanceHelp:
+        "Checks your New API balance at the chosen interval and shows the remaining quota in a pet bubble.",
+      newApiBaseUrl: "New API Base URL",
+      newApiBaseUrlPlaceholder: "https://api.example.com",
+      newApiKey: "API Key",
+      newApiKeyPlaceholder: "sk-...",
+      newApiKeyHelp: "Kept only in this app's local settings file and never uploaded elsewhere.",
+      tokenBalanceInterval: "Reminder Interval",
+      tokenBalanceIntervalHelp: "Every check also pops a bubble reminder.",
+      tokenBalanceCheck: "Check Now",
+      tokenBalanceCurrent: "Current Balance",
+      tokenBalanceChecking: "Checking…",
+      tokenBalanceIdle: "Not checked yet.",
+      tokenBalanceUnconfigured: "Enter a Base URL and API Key first.",
+      tokenBalanceOk: (percent: string, remaining: string) =>
+        `${percent} left (${remaining})`,
+      tokenBalanceUnlimited: "Unlimited quota",
+      tokenBalanceError: (message: string) => `Check failed: ${message}`,
+      tokenBalanceResetAt: (time: string) => `Resets ${time}`,
+      tokenBalanceCheckedAt: (time: string) => `Last checked: ${time}`,
+      tokenBalanceInvalidUrl: "Base URL is not valid.",
+      customActions: "Custom Actions",
+      customActionsHelp: "Add an action with a GIF, then play it from the pet's right-click menu.",
+      addCustomAction: "Add Action",
+      customActionName: "Action Name",
+      customActionNamePlaceholder: "e.g. Say hi",
+      customActionGif: "Action GIF",
+      noCustomActions: "No custom actions yet.",
+      removeCustomAction: (name: string) => `Remove action ${name}`,
+      newCustomAction: "New action",
+      deleteAction: "Delete",
+      schedule: "Work & Meals",
+      enableScheduleReminders: "Enable Work & Meal Reminders",
+      scheduleHelp:
+        "Weekdays only. At each time the pet shows a bubble, and plays the GIF if one is set.",
+      workStartTime: "Work Start",
+      workEndTime: "Work End",
+      mealTimes: "Meal Times",
+      addMealTime: "Add Time",
+      removeMealTime: (time: string) => `Remove ${time}`,
+      scheduleGif: "Reminder GIF",
+      workStartGif: "Work Start GIF",
+      workEndGif: "Work End GIF",
+      mealGif: "Meal GIF",
+      defaultAnimation: "Default animation",
       focus: "Focus",
       focusDuration: "Focus Duration",
       enableDistractionDetection: "Enable Distraction Detection",

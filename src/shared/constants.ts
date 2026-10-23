@@ -51,7 +51,19 @@ export const DEFAULT_SETTINGS: Settings = {
     "哔哩哔哩",
     "虎扑",
     "贴吧"
-  ]
+  ],
+  tokenBalanceReminderEnabled: false,
+  newApiBaseUrl: "",
+  newApiKey: "",
+  tokenBalanceReminderIntervalMinutes: 10,
+  customActions: [],
+  scheduleRemindersEnabled: false,
+  workStartTime: "09:30",
+  workEndTime: "18:30",
+  mealTimes: ["12:00"],
+  workStartAsset: null,
+  workEndAsset: null,
+  mealAsset: null
 };
 
 export function todayKey(date = new Date()): string {

@@ -33,6 +33,21 @@ export type CustomPetAppearance = {
   assets: Partial<Record<PetState, CustomPetAsset>>;
 };
 
+export type CustomAction = {
+  id: string;
+  name: string;
+  asset: CustomPetAsset | null;
+};
+
+export type ScheduleAssetKind = "workStart" | "workEnd" | "meal";
+
+export type CustomActionPlayback = {
+  id: string;
+  name: string;
+  relativePath: string;
+  startedAt: number;
+};
+
 export type BubbleAction = {
   id: string;
   label: string;
@@ -65,6 +80,29 @@ export type Settings = {
   distractionGraceSeconds: number;
   distractionBlockedApps: string[];
   distractionBlockedKeywords: string[];
+  tokenBalanceReminderEnabled: boolean;
+  newApiBaseUrl: string;
+  newApiKey: string;
+  tokenBalanceReminderIntervalMinutes: number;
+  customActions: CustomAction[];
+  scheduleRemindersEnabled: boolean;
+  workStartTime: string;
+  workEndTime: string;
+  mealTimes: string[];
+  workStartAsset: CustomPetAsset | null;
+  workEndAsset: CustomPetAsset | null;
+  mealAsset: CustomPetAsset | null;
+};
+
+export type TokenBalanceStatus = {
+  state: "idle" | "checking" | "ok" | "unlimited" | "error";
+  tokenName: string | null;
+  remaining: number | null;
+  total: number | null;
+  percentRemaining: number | null;
+  resetAt: number | null;
+  checkedAt: number | null;
+  error: string | null;
 };
 
 export type TodayStats = {
@@ -101,6 +139,8 @@ export type AppSnapshot = {
   statsHistory: StatsHistory;
   timers: TimerStatus;
   distraction: DistractionStatus;
+  tokenBalance: TokenBalanceStatus;
+  customActionPlayback: CustomActionPlayback | null;
   petState: PetState;
   petFacing: PetFacing;
   blockingMode: BlockingMode;

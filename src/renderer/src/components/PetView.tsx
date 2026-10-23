@@ -66,6 +66,13 @@ export function PetView(): JSX.Element {
   const appearanceId = snapshot.settings.petAppearanceId;
   const customAppearance = snapshot.settings.customPetAppearance;
   const asset = getPetAsset(appearanceId, state, assetVariant, assetReplayKey, customAppearance);
+  const playback = snapshot.customActionPlayback;
+  const displayedAsset = playback
+    ? {
+        src: new URL(window.pawpal.assetUrl(playback.relativePath)).href,
+        isPlaceholder: false
+      }
+    : asset;
 
   function finishPointerDrag(clicked: boolean): void {
     const drag = dragRef.current;
@@ -236,8 +243,8 @@ export function PetView(): JSX.Element {
 
       <button
         className={`pet-button state-${state} ${facingClass} ${
-          asset.isPlaceholder ? "placeholder-asset" : ""
-        }`}
+          asset.isPlaceholder && !playback ? "placeholder-asset" : ""
+        }${playback ? " is-custom-action" : ""}`}
         onPointerCancel={cancelPointer}
         onPointerDown={startPointer}
         onLostPointerCapture={() => finishPointerDrag(false)}
@@ -245,7 +252,7 @@ export function PetView(): JSX.Element {
         onPointerUp={stopPointer}
         type="button"
       >
-        <img draggable={false} src={asset.src} alt={altText} />
+        <img draggable={false} src={displayedAsset.src} alt={altText} />
       </button>
     </main>
   );

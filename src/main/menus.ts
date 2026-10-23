@@ -1,5 +1,5 @@
 import type { I18nBundle } from "../shared/i18n";
-import type { DemoTrigger } from "../shared/types";
+import type { CustomAction, DemoTrigger } from "../shared/types";
 
 type MenuLabels = I18nBundle["menu"];
 
@@ -8,6 +8,7 @@ type MenuState = {
   dogVisible: boolean;
   focusActive: boolean;
   isPackaged: boolean;
+  customActions: CustomAction[];
 };
 
 type MenuActions = {
@@ -17,9 +18,28 @@ type MenuActions = {
   stopFocusFromMenu: () => void;
   stopFocusFromContext: () => void;
   openSettings: () => void;
+  playCustomAction: (actionId: string) => void;
   quit: () => void;
   triggerDemo: (trigger: DemoTrigger) => void;
 };
+
+function customActionItems(
+  labels: MenuLabels,
+  state: MenuState,
+  actions: MenuActions
+): Electron.MenuItemConstructorOptions[] {
+  const playable = state.customActions.filter((action) => action.asset);
+  if (playable.length === 0) return [];
+  return [
+    {
+      label: labels.customActions,
+      submenu: playable.map((action) => ({
+        label: action.name || labels.unnamedAction,
+        click: () => actions.playCustomAction(action.id)
+      }))
+    }
+  ];
+}
 
 function demoItems(
   labels: MenuLabels,
@@ -48,6 +68,7 @@ function actionItems(
       label: state.focusActive ? labels.stopFocusMode : labels.startFocusMode,
       click: state.focusActive ? actions.stopFocusFromMenu : actions.startFocus
     },
+    ...customActionItems(labels, state, actions),
     ...(state.isPackaged ? [] : demoItems(labels, actions)),
     { type: "separator" },
     { label: labels.settings, click: actions.openSettings }
@@ -101,6 +122,7 @@ export function buildPetContextMenuTemplate(
       label: state.focusActive ? labels.stopFocusMode : labels.startFocusMode,
       click: state.focusActive ? actions.stopFocusFromContext : actions.startFocus
     },
+    ...customActionItems(labels, state, actions),
     ...(state.isPackaged ? [] : demoItems(labels, actions)),
     { type: "separator" },
     {

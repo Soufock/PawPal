@@ -7,6 +7,7 @@ import type {
   Settings,
   SpeechBubble,
   TodayStats,
+  TokenBalanceStatus,
   UpdateCheckResult
 } from "../shared/types";
 
@@ -22,10 +23,14 @@ const api = {
   getSnapshot: (): Promise<AppSnapshot> => ipcRenderer.invoke("app:get-snapshot"),
   openReleaseNotes: (): void => ipcRenderer.send("app:open-release-notes"),
   checkForUpdates: (): Promise<UpdateCheckResult> => ipcRenderer.invoke("app:check-for-updates"),
+  checkTokenBalance: (): Promise<TokenBalanceStatus> =>
+    ipcRenderer.invoke("token-balance:check"),
   selectCustomPetAsset: (state: PetState): Promise<CustomPetAsset | null> =>
     ipcRenderer.invoke("custom-pet:select-asset", state),
   importCustomPetAsset: (state: PetState, sourcePath: string): Promise<CustomPetAsset | null> =>
     ipcRenderer.invoke("custom-pet:import-asset", state, sourcePath),
+  selectCustomGif: (): Promise<CustomPetAsset | null> =>
+    ipcRenderer.invoke("custom-gif:select"),
   pathForFile: (file: File): string => webUtils.getPathForFile(file),
   petClicked: (): void => ipcRenderer.send("pet:clicked"),
   petContextMenu: (): void => ipcRenderer.send("pet:context-menu"),

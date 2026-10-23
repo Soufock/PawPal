@@ -51,6 +51,43 @@ export const tests = [
     }
   },
   {
+    name: "normalizeSettings disables token reminders until New API is configured",
+    run(): void {
+      const withoutConfig = normalizeSettings({ tokenBalanceReminderEnabled: true });
+      assert.equal(withoutConfig.tokenBalanceReminderEnabled, false);
+      assert.equal(withoutConfig.newApiBaseUrl, "");
+      assert.equal(withoutConfig.newApiKey, "");
+
+      const withConfig = normalizeSettings({
+        tokenBalanceReminderEnabled: true,
+        newApiBaseUrl: "  https://api.example.com/ ",
+        newApiKey: "  sk-123  "
+      });
+      assert.equal(withConfig.tokenBalanceReminderEnabled, true);
+      assert.equal(withConfig.newApiBaseUrl, "https://api.example.com");
+      assert.equal(withConfig.newApiKey, "sk-123");
+    }
+  },
+  {
+    name: "normalizeSettings clamps the token reminder interval",
+    run(): void {
+      assert.equal(
+        normalizeSettings({ tokenBalanceReminderIntervalMinutes: 0 }).tokenBalanceReminderIntervalMinutes,
+        1
+      );
+      assert.equal(
+        normalizeSettings({ tokenBalanceReminderIntervalMinutes: 99999 })
+          .tokenBalanceReminderIntervalMinutes,
+        1440
+      );
+      assert.equal(
+        normalizeSettings({ tokenBalanceReminderIntervalMinutes: 10.4 })
+          .tokenBalanceReminderIntervalMinutes,
+        10
+      );
+    }
+  },
+  {
     name: "normalizeSettings preserves valid custom pet settings",
     run(): void {
       const settings = normalizeSettings({
