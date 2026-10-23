@@ -1,0 +1,19 @@
+build/entitlements.mac.plist
+  s_e8c7c33406c039::t_6c337ebaa145f3 13-14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b0da4f4c0a6e66c3e0dfc9e05f505d9962f7da80",
+  "prompts": {},
+  "sessions": {
+    "s_e8c7c33406c039": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c9f2e6c0-06ca-4a45-a79d-aa7ce70b6983",
+        "model": "unknown"
+      },
+      "human_author": "liujianhua <liujianhua@sunglorylife.com>"
+    }
+  }
+}
