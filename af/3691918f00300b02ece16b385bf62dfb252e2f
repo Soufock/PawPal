@@ -1,0 +1,63 @@
+README.md
+  s_e8c7c33406c039::t_093602cd0e676c 31-33
+src/main/main.ts
+  s_e8c7c33406c039::t_3cc30c577a1f96 24-27,31-32,36,43,74,150-167,191-192,217-222,225-226,229-231,234,240-244,254-259,270-276,295-296,570-571,583,987-1235,1452,1459,1500-1504,1511-1513,1515-1519,1533-1534,1557-1559
+src/main/menus.ts
+  s_e8c7c33406c039::t_22e3cc79a112c2 2,11,21,26-43,71,125
+src/main/settingsStore.ts
+  s_e8c7c33406c039::t_7e9e10c69b2ad3 2,6,10-11,18-23,25-29,35-39,54-72
+src/main/tokenBalance.ts
+  s_e8c7c33406c039::t_0c0b1200997d39 1-30
+src/preload/index.ts
+  s_e8c7c33406c039::t_312ef6baf434be 10,26-27,32-33
+src/renderer/src/components/PetView.tsx
+  s_e8c7c33406c039::t_342a6809e3b03f 69-75,246-247,255
+src/renderer/src/components/SettingsView.tsx
+  s_e8c7c33406c039::t_0e10b47392424a 12-13,16,25-33,61-62,67,75,84-109,193-256,428-430,468-534,726-946
+src/renderer/src/format.ts
+  s_e8c7c33406c039::t_cb78b4e14f6b95 78-124
+src/renderer/src/hooks.ts
+  s_e8c7c33406c039::t_dc37d79a51deca 44-54
+src/renderer/src/styles.css
+  s_e8c7c33406c039::t_39a5e364a76015 379,574-696
+src/shared/constants.ts
+  s_e8c7c33406c039::t_e6800cd1ce864f 54-66
+src/shared/customActions.ts
+  s_e8c7c33406c039::t_1530dcf1e3c60c 1-33
+src/shared/i18n.ts
+  s_e8c7c33406c039::t_57a26c3e951a5d 82-115,133-134,222-266,401-434,452-453,544-591
+src/shared/petAppearances.ts
+  s_e8c7c33406c039::t_b0b1ae36f320ee 304-314,317
+src/shared/schedule.ts
+  s_e8c7c33406c039::t_666f74df378c9e 1-86
+src/shared/tokenUsage.ts
+  s_e8c7c33406c039::t_00d9b74c365797 1-132
+src/shared/types.ts
+  s_e8c7c33406c039::t_06bdc4781cf033 36-50,83-105,142-143
+tests/customActions.test.ts
+  s_e8c7c33406c039::t_3d5e58637fac4c 1-73
+tests/menus.test.ts
+  s_e8c7c33406c039::t_8d9dd589b2d910 1-80
+tests/schedule.test.ts
+  s_e8c7c33406c039::t_4ed3bdbc68fd67 1-106
+tests/settingsStore.test.ts
+  s_e8c7c33406c039::t_df5d2429e28542 53-89
+tests/tokenUsage.test.ts
+  s_e8c7c33406c039::t_1b991c01bd36de 1-148
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "af3691918f00300b02ece16b385bf62dfb252e2f",
+  "prompts": {},
+  "sessions": {
+    "s_e8c7c33406c039": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c9f2e6c0-06ca-4a45-a79d-aa7ce70b6983",
+        "model": "unknown"
+      },
+      "human_author": "liujianhua <liujianhua@sunglorylife.com>"
+    }
+  }
+}
